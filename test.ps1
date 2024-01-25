@@ -1,1 +1,1 @@
-dir
+Invoke-WebRequest "www.baidu.com"
