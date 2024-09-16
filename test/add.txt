@@ -2,6 +2,7 @@ wto.org:2096#CF_US_wto.org
 104.19.0.0:2096#CF_US_104-19
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
 ip.sb:2096#CF_US_ip.sb
+time.is:2096#CF_US_time.is
 cf.090227.xyz:2096#CF_US_cf.090227.xyz
 
 104.19.251.0:2096#CF_US_104.19.251.0
