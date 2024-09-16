@@ -3,7 +3,7 @@
 104.19.0.0:2083#手动优化_2083
 104.19.0.0:2087#手动优化_2087
 104.19.0.0:2096#手动优化_2096
-104.19.0.0:8443#手动优化_2096
+104.19.0.0:8443#手动优化_8443
 
 wto.org:2096#CF_US_wto.org
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
