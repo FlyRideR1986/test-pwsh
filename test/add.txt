@@ -1,5 +1,6 @@
-wto.org:443#CF_US_wto.org
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
+flyrider.us.kg:443#CF_US_flyrider.us.kg
+wto.org:443#CF_US_wto.org
 ip.sb:443#CF_US_ip.sb
 cf.090227.xyz:443#CF_US_f.090227.xyz
 cmcc.090227.xyz:443#CF_US_m.090227.xyz
