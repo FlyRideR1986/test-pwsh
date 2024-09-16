@@ -1,21 +1,18 @@
-cf.090227.xyz:2096#CF_US_cf.090227.xyz
-ct.090227.xyz:2096#CF_US_ct.090227.xyz
-cmcc.090227.xyz:2096#CF_US_cmcc.090227.xyz
 wto.org:2096#CF_US_wto.org
-time.is:2096#CF_US_time.is
-ip.sb:2096#CF_US_ip.sb
-japan.com:2096#CF_US_japan.com
-malaysia.com:2096#CF_US_malaysia.com
-russia.com:2096#CF_US_russia.com
-singapore.com:2096#CF_US_singapore.com
+104.19.0.0:2096#CF_US_104-19
+engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
+cf.090227.xyz:2096#CF_US_cf.090227.xyz
 
 104.19.251.0:2096#CF_US_104.19.251.0
 104.19.252.0:2096#CF_US_104.19.252.0
 104.19.253.0:2096#CF_US_104.19.253.0
 104.19.254.0:2096#CF_US_104.19.254.0
 104.19.255.0:2096#CF_US_104.19.255.0
+cmcc.090227.xyz:2096#CF_US_cmcc.090227.xyz
+
 162.159.251.0:2096#CF_US_162.159.251.0
 162.159.252.0:2096#CF_US_162.159.252.0
 162.159.253.0:2096#CF_US_162.159.253.0
 162.159.254.0:2096#CF_US_162.159.254.0
 162.159.255.0:2096#CF_US_162.159.255.0
+ct.090227.xyz:2096#CF_US_ct.090227.xyz
