@@ -1,5 +1,5 @@
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
-flyrider.us.kg:443#CF_US_flyrider.us.kg
+mianfeiworker.flyrider.us.kg:443#CF_US_mianfeiworker.flyrider.us.kg
 cn.china.cf.090227.xyz:443#CF_US_f.090227.xyz
 cmcc.090227.xyz:443#CF_US_m.090227.xyz
 ct.090227.xyz:443#CF_US_t.090227.xyz
