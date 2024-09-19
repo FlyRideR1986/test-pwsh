@@ -1,8 +1,5 @@
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
-mianfeiworker.flyrider.us.kg:2096#CF_US_mianfeiworker.flyrider.us.kg
-cn.china.cf.090227.xyz:2096#CF_US_f.090227.xyz
 cmcc.090227.xyz:2096#CF_US_m.090227.xyz
 ct.090227.xyz:2096#CF_US_t.090227.xyz
 162.159.241.0:2096#CF_US_162.159.241.0:2096
 162.159.251.0:2096#CF_US_162.159.251.0:2096
-wto.org:2096#CF_US_wto.org
