@@ -1,9 +1,10 @@
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
 engage.nanocat.cloud:443#CF_US_engage.nanocat.cloud
-engage.cloudflare.cloud:443#CF_US_engage.cloudflare.cloud
-162.159.192.0:443#CF_US_162.159.192.0:443
-162.159.241.0:443#CF_US_162.159.241.0:443
-162.159.251.0:443#CF_US_162.159.251.0:443
+engage.nanocat.me:443#CF_US_engage.nanocat.me
+
+#162.159.192.0:443#CF_US_162.159.192.0
+#162.159.241.0:443#CF_US_162.159.241.0
+#162.159.251.0:443#CF_US_162.159.251.0
 
 #cn.cf.090227.xyz:443#CF_US_f.090227.xyz
 #ct.090227.xyz:443#CF_US_t.090227.xyz
