@@ -2,6 +2,6 @@ engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
 162.159.241.0:443#CF_US_162.159.241.0:443
 162.159.251.0:443#CF_US_162.159.251.0:443
 
-cn.cf.090227.xyz:443#CF_US_f.090227.xyz
+#cn.cf.090227.xyz:443#CF_US_f.090227.xyz
 cmcc.090227.xyz:443#CF_US_m.090227.xyz
-ct.090227.xyz:443#CF_US_t.090227.xyz
+#ct.090227.xyz:443#CF_US_t.090227.xyz
