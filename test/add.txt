@@ -13,3 +13,4 @@ engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
 #ct.090227.xyz:443#CF_US_t.090227.xyz
 
 cmcc.090227.xyz:443#CF_CMCC_m.090227.xyz
+104.19.0.0:443#CF_CMCC_104.19.0.0
