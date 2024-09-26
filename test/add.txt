@@ -1,6 +1,7 @@
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
 bangumi.online:443#CF_US_bangumi.online
 ctcucm.luluyimemeda.us.kg:443#CF_US_ctcucm.luluyimemeda.us.kg
+cmcuct.luluyimemeda.us.kg:443#CF_US_cmcuct.luluyimemeda.us.kg
 
 #cn.cf.090227.xyz:443#CF_US_f.090227.xyz
 #ct.090227.xyz:443#CF_US_t.090227.xyz
