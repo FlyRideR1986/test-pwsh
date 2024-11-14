@@ -7,3 +7,7 @@ cmcuct.luluyimemeda.us.kg:443#CF_US_cmcuct.luluyimemeda.us.kg
 cmcc.090227.xyz:443#CF_US_m.090227.xyz
 
 engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
+
+104.19.240.0:443#CF_US_104.19.240.0
+
+162.159.240.0:443#CF_US_162.159.240.0
