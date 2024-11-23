@@ -1,4 +1,1 @@
-bangumi.online:443#CF_US_bangumi.online
-ccc.luluyimemeda.us.kg:443#CF_US_ccc.luluyimemeda.us.kg
-engage.cloudflareclient.com:443#CF_US_engage.cloudflareclient.com
-cmcc.090227.xyz:443#CF_US_cmcc.090227.xyz
+cmcc.090227.xyz:443#CMCC_CF
