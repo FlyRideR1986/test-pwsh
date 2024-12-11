@@ -1,5 +1,5 @@
-cfyx_hkg.luluyimemeda.us.kg#CFYX_HK
-cfyx_lhr.luluyimemeda.us.kg#CFYX_UK
-cfyx_nrtkix.luluyimemeda.us.kg#CFYX_JP
-cfyx_sjclax.luluyimemeda.us.kg#CFYX_US
-cfyx_sin.luluyimemeda.us.kg#CFYX_SG
+cfyx_hkg.luluyimemeda.us.kg#CFYX-HK
+cfyx_lhr.luluyimemeda.us.kg#CFYX-UK
+cfyx_nrtkix.luluyimemeda.us.kg#CFYX-JP
+cfyx_sjclax.luluyimemeda.us.kg#CFYX-US
+cfyx_sin.luluyimemeda.us.kg#CFYX-SG
