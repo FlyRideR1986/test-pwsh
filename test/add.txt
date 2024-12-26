@@ -1,14 +1,1 @@
-cfyx-lax.luluyimemeda.us.kg#CFYX-US-L
-cfyx-sjc.luluyimemeda.us.kg#CFYX-US-S
-cfyx-iad.luluyimemeda.us.kg#CFYX-US-A
 
-cfyx-lhr.luluyimemeda.us.kg#CFYX-UK
-
-cfyx-hkg.luluyimemeda.us.kg#CFYX-HK
-
-cfyx-sin.luluyimemeda.us.kg#CFYX-SG
-
-cfyx-nrt.luluyimemeda.us.kg#CFYX-JP-N
-cfyx-kix.luluyimemeda.us.kg#CFYX-JP-K
-
-cfyx-cdg.luluyimemeda.us.kg#CFYX-FR
