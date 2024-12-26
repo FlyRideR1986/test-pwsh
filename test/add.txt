@@ -1,1 +1,7 @@
+cfyx-lax.luluyimemeda.us.kg#US_LAX
+cfyx-sjc.luluyimemeda.us.kg#US_SJC
+cfyx-iad.luluyimemeda.us.kg#US_IAD
 
+cfyx-hkg.luluyimemeda.us.kg#HK_HKG
+
+cfyx-lhr.luluyimemeda.us.kg#UK_LHR
