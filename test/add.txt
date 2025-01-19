@@ -1,6 +1,8 @@
 cfyx-lax.luluyimemeda.us.kg#US_LAX
 cfyx-sjc.luluyimemeda.us.kg#US_SJC
 
+cfyx-nrt.luluyimemeda.us.kg#JP_NRT
+
 cfyx-hkg.luluyimemeda.us.kg#HK_HKG
 
 cfyx-lhr.luluyimemeda.us.kg#UK_LHR
