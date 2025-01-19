@@ -6,3 +6,5 @@ cfyx-nrt.luluyimemeda.us.kg#JP_NRT
 cfyx-hkg.luluyimemeda.us.kg#HK_HKG
 
 cfyx-lhr.luluyimemeda.us.kg#UK_LHR
+
+cmcc.luluyimemeda.us.kg#US_CMCC
