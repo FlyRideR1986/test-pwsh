@@ -81,7 +81,7 @@ ech-tunnel -l proxy://127.0.0.1:1080 -f wss://server.com:8443/tunnel -n 10
 第二步，启动ech-workers客户端，启动参数-h看帮助文件
 第三步，实在是搞不明白怎么玩，等过两天去油管看看有没有up主折腾这个。
 
-
+```bash
 Usage of ./ech-workers:
   -dns string
         ECH 查询 DNS 服务器 (default "119.29.29.29:53")
@@ -95,5 +95,5 @@ Usage of ./ech-workers:
         代理监听地址 (支持 SOCKS5 和 HTTP) (default "127.0.0.1:30000")
   -token string
         身份验证令牌
-
+```
 
