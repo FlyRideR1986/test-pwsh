@@ -787,14 +787,14 @@ EOF
 apk del jq unzip wireguard-tools
 apk cache clean
 
+echo "后台启动nginx docker registry proxy"
+nginx -c /etc/nginx/nginx.conf
+
 echo "后台启动cloudflared"
 nohup /usr/local/bin/cloudflared tunnel --protocol quic --loglevel fatal run --token "$CLOUDFLARED_TOKEN" > /dev/null 2>&1 &
 
 echo "后台启动xray"
 nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
-
-echo "后台启动nginx docker registry proxy"
-nginx -c /etc/nginx/nginx.conf
 
 echo "前台启动crond保活容器"
 crond -f
