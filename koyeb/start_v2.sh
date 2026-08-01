@@ -476,7 +476,288 @@ mkdir -p /run/nginx /var/lib/nginx/tmp/client_body
 
 cat <<'EOF' > /etc/nginx/nginx.conf
 
+user nginx;
+worker_processes auto;
+pid /run/nginx/nginx.pid;
 
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    server_tokens off;
+
+    access_log off;
+    error_log /dev/stderr warn;
+
+    # 动态 Docker CDN 域名解析
+    resolver 1.1.1.1 8.8.8.8 ipv6=off valid=300s;
+    resolver_timeout 5s;
+
+    sendfile on;
+    tcp_nopush on;
+
+    keepalive_timeout 65s;
+
+    # Docker 镜像及 XHTTP 不限制请求体大小
+    client_max_body_size 0;
+    client_body_timeout 3600s;
+    send_timeout 3600s;
+
+    # 通用反向代理设置
+    proxy_ssl_server_name on;
+    proxy_http_version 1.1;
+
+    proxy_buffering off;
+    proxy_request_buffering off;
+
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+
+    # WebSocket Connection 头
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
+    }
+
+    # 重写 Docker Registry 返回的认证地址
+    map $upstream_http_www_authenticate $docker_auth_header {
+        default $upstream_http_www_authenticate;
+
+        "~Bearer realm=\"https://auth\.docker\.io/token\",(.*)"
+        "Bearer realm=\"https://$http_host/token\",$1";
+    }
+
+    server {
+        # Koyeb 当前唯一公开的容器端口
+        listen 0.0.0.0:55555 default_server;
+
+        server_name _;
+
+        # =========================================================
+        # 基础响应
+        # =========================================================
+
+        # Koyeb 健康检查
+        location = /healthz {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+
+        # 根路径返回正常响应
+        location = / {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+
+
+        # =========================================================
+        # Xray WebSocket
+        # =========================================================
+
+        # Koyeb 主路线：
+        # /ws -> Xray 127.0.0.1:11111
+        location = /ws {
+            proxy_pass http://127.0.0.1:11111;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+
+        # Cloudflared 备选路线：
+        # /ws2cf -> Xray 127.0.0.1:22222
+        location = /ws2cf {
+            proxy_pass http://127.0.0.1:22222;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+
+
+        # =========================================================
+        # Xray XHTTP
+        # =========================================================
+
+        # 注意：
+        # XHTTP 实际请求不只有 /xhttp，
+        # 还会出现：
+        #
+        # /xhttp/<session-id>
+        # /xhttp/<session-id>/<sequence>
+        #
+        # 所以不能使用：
+        #
+        # location = /xhttp
+        #
+        # 必须匹配 /xhttp 及其所有子路径。
+
+        # Koyeb 主路线：
+        # /xhttp/... -> Xray 127.0.0.1:33333
+        location ~ ^/xhttp(?:/|$) {
+            proxy_pass http://127.0.0.1:33333;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+
+            # XHTTP 不是 WebSocket，不传 Upgrade
+            proxy_set_header Connection "";
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # 禁止缓存和请求缓冲，确保流式传输
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_cache off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+
+            add_header X-Accel-Buffering no always;
+        }
+
+        # Cloudflared 备选路线：
+        # /xhttp2cf/... -> Xray 127.0.0.1:44444
+        location ~ ^/xhttp2cf(?:/|$) {
+            proxy_pass http://127.0.0.1:44444;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+            proxy_set_header Connection "";
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_cache off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+
+            add_header X-Accel-Buffering no always;
+        }
+
+
+        # =========================================================
+        # Docker Hub Token Service
+        # =========================================================
+
+        location = /token {
+            # 使用变量延迟 DNS 解析，避免 Nginx 启动时
+            # 因临时 DNS 失败而整个启动失败
+            set $docker_auth_upstream auth.docker.io;
+
+            proxy_pass https://$docker_auth_upstream/token$is_args$args;
+
+            proxy_ssl_name $docker_auth_upstream;
+            proxy_ssl_server_name on;
+
+            proxy_set_header Host auth.docker.io;
+            proxy_set_header User-Agent $http_user_agent;
+        }
+
+
+        # =========================================================
+        # Docker Registry V2 API
+        # =========================================================
+
+        location /v2/ {
+            set $docker_registry_upstream registry-1.docker.io;
+
+            # 保留原始 /v2/... 请求路径及查询参数
+            proxy_pass https://$docker_registry_upstream$request_uri;
+
+            proxy_ssl_name $docker_registry_upstream;
+            proxy_ssl_server_name on;
+
+            proxy_set_header Host registry-1.docker.io;
+            proxy_set_header Authorization $http_authorization;
+            proxy_set_header User-Agent $http_user_agent;
+
+            proxy_hide_header WWW-Authenticate;
+
+            add_header WWW-Authenticate
+                $docker_auth_header
+                always;
+
+            add_header Docker-Distribution-Api-Version
+                registry/2.0
+                always;
+
+            # Docker Hub 返回 Blob CDN 地址时，
+            # 将跳转地址重写回当前反代域名
+            proxy_redirect
+                ~^https://([^/]+)/(.*)$
+                https://$http_host/proxy/$1/$2;
+        }
+
+
+        # =========================================================
+        # Docker Blob CDN
+        # =========================================================
+
+        # 处理经过上面重写后的：
+        #
+        # /proxy/<上游域名>/<文件路径>
+        location ~ ^/proxy/([^/]+)(/.*)$ {
+            proxy_pass https://$1$2$is_args$args;
+
+            proxy_ssl_name $1;
+            proxy_ssl_server_name on;
+
+            proxy_set_header Host $1;
+
+            # Blob CDN 一般不需要 Docker Authorization
+            proxy_set_header Authorization "";
+            proxy_set_header User-Agent $http_user_agent;
+
+            proxy_redirect
+                ~^https://([^/]+)/(.*)$
+                https://$http_host/proxy/$1/$2;
+        }
+
+
+        # =========================================================
+        # 其他路径
+        # =========================================================
+
+        location / {
+            return 404;
+        }
+    }
+}
 
 EOF
 
