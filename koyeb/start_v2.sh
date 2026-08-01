@@ -774,7 +774,7 @@ cat <<EOF > /etc/crontabs/root
 
 */5 * * * pgrep -f "nginx: master process" > /dev/null || nginx -c /etc/nginx/nginx.conf
 
-*/15 * * * curl -fsSL --max-time 20 "https://$KOYEB_PUBLIC_DOMAIN/v2/" > keep_alive.log
+*/15 * * * curl -fsSL --max-time 20 "https://$KOYEB_PUBLIC_DOMAIN/healthz" > keep_alive.log
 
 EOF
 
