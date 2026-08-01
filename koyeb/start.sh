@@ -280,7 +280,7 @@ cat <<EOF > /etc/xray/confs/inbounds.json
     "inbounds": [
         {
             "tag": "vless_ws",
-            "listen": "0.0.0.0",
+            "listen": "127.0.0.1",
             "port": 11111,
             "protocol": "vless",
             "settings": {
@@ -327,7 +327,7 @@ cat <<EOF > /etc/xray/confs/inbounds.json
         },
         {
             "tag": "vless_ws_cf",
-            "listen": "0.0.0.0",
+            "listen": "127.0.0.1",
             "port": 22222,
             "protocol": "vless",
             "settings": {
@@ -374,7 +374,7 @@ cat <<EOF > /etc/xray/confs/inbounds.json
         },
         {
             "tag": "vless_xhttp",
-            "listen": "0.0.0.0",
+            "listen": "127.0.0.1",
             "port": 33333,
             "protocol": "vless",
             "settings": {
@@ -410,7 +410,7 @@ cat <<EOF > /etc/xray/confs/inbounds.json
         },
         {
             "tag": "vless_xhttp_cf",
-            "listen": "0.0.0.0",
+            "listen": "127.0.0.1",
             "port": 44444,
             "protocol": "vless",
             "settings": {
