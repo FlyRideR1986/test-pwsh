@@ -784,7 +784,7 @@ cat <<EOF > /etc/crontabs/root
 
 */5 * * * pgrep -x "/usr/local/bin/xray" > /dev/null || nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
 
-*/5 * * * pgrep -x "/usr/local/bin/realm" > /dev/null || /usr/local/bin/realm --token "$REALM_TOKEN" --listen :5555 > /dev/null 2>&1 &
+*/5 * * * pgrep -x "/usr/local/bin/realm" > /dev/null || /usr/local/bin/realm --token "$REALM_TOKEN" --listen 127.0.0.1:5555 > /dev/null 2>&1 &
 
 */15 * * * curl -fsSL --max-time 20 "https://$KOYEB_PUBLIC_DOMAIN/healthz" > keep_alive.log
 
@@ -809,7 +809,7 @@ echo "后台启动xray"
 nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
 
 echo "后台启动realm"
-nohup /usr/local/bin/realm --token "$REALM_TOKEN" --listen :5555 > /dev/null 2>&1 &
+nohup /usr/local/bin/realm --token "$REALM_TOKEN" --listen 127.0.0.1:5555 > /dev/null 2>&1 &
 
 echo "前台启动crond保活容器"
 crond -f
