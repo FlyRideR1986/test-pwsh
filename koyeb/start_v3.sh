@@ -780,7 +780,7 @@ cat <<EOF > /etc/crontabs/root
 
 */5 * * * pgrep -f "nginx: master process" > /dev/null || nginx -c /etc/nginx/nginx.conf
 
-*/5 * * * pgrep -x "/usr/local/bin/cloudflared" > /dev/null || nohup /usr/local/bin/cloudflared tunnel --edge-ip-version auto --protocol http2 --loglevel fatal run --token "$CLOUDFLARED_TOKEN" > /dev/null 2>&1 &
+*/5 * * * pgrep -x "/usr/local/bin/cloudflared" > /dev/null || nohup /usr/local/bin/cloudflared tunnel --edge-ip-version auto --protocol quic --loglevel fatal run --token "$CLOUDFLARED_TOKEN" > /dev/null 2>&1 &
 
 */5 * * * pgrep -x "/usr/local/bin/xray" > /dev/null || nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
 
