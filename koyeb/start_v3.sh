@@ -803,7 +803,7 @@ echo "后台启动nginx docker registry proxy"
 nginx -c /etc/nginx/nginx.conf
 
 echo "后台启动cloudflared"
-nohup /usr/local/bin/cloudflared tunnel --edge-ip-version auto --protocol http2 --loglevel fatal run --token "$CLOUDFLARED_TOKEN" > /dev/null 2>&1 &
+nohup /usr/local/bin/cloudflared tunnel --edge-ip-version auto --protocol quic --loglevel fatal run --token "$CLOUDFLARED_TOKEN" > /dev/null 2>&1 &
 
 echo "后台启动xray"
 nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
