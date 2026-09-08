@@ -392,7 +392,12 @@ if [ -z "$private_key" ] \
     "outbounds": [
         {
             "tag": "direct",
-            "protocol": "freedom"
+            "protocol": "freedom",
+            "streamSettings": {
+                "sockopt": {
+                    "tcpcongestion": "bbr"
+                }
+            }
         }
     ]
 }
@@ -421,7 +426,12 @@ EOF
     "outbounds": [
         {
             "tag": "direct",
-            "protocol": "freedom"
+            "protocol": "freedom",
+            "streamSettings": {
+                "sockopt": {
+                    "tcpcongestion": "bbr"
+                }
+            }
         },
         {  
             "tag": "wg",
