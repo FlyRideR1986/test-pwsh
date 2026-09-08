@@ -4,6 +4,29 @@
 : "${CLOUDFLARED_TOKEN:?missing CLOUDFLARED_TOKEN}"
 : "${REALM_TOKEN:?missing REALM_TOKEN}"
 
+
+# ============================================================
+# [网络性能优化] Go 并行度
+#
+# Koyeb Free 只有 0.1 vCPU。
+# cloudflared 和 Xray 都是 Go 程序。
+#
+# 即使新版 Go 已经能识别 cgroup CPU quota，
+# Go 当前对自动 GOMAXPROCS 仍有最小 2 的规则。
+# 对只有 0.1 vCPU 的实例，2 个并行执行线程仍明显高于实际 CPU 配额，
+# 容易产生短时 CPU burst -> cgroup throttling。
+#
+# 固定 GOMAXPROCS=1：
+# - 不限制 goroutine 数量
+# - 不妨碍异步网络 I/O
+# - 只限制同时执行 Go 代码的并行度
+# - 减少 cloudflared / Xray 内部 CPU 调度竞争和 quota throttling
+#
+# 如果外部已经显式指定 GOMAXPROCS，则尊重外部值。
+# ============================================================
+export GOMAXPROCS="${GOMAXPROCS:-1}"
+
+
 # ============================================================
 # [新增] 网络性能优化：仅调整 Linux TCP/UDP 参数
 #
