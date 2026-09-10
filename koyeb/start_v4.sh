@@ -243,7 +243,7 @@ echo "warp-reg.sh注册warp"
 
 API_URL="${API_URL:-https://api.cloudflareclient.com/v0a2158/reg}"
 CF_CLIENT_VERSION="${CF_CLIENT_VERSION:-a-7.21-0721}"
-MTU="${MTU:-1420}"
+MTU="${MTU:-1280}"
 
 err() {
     printf >&2 'ERROR: %s\n' "$*"
@@ -321,7 +321,7 @@ assign_warp_vars() {
     # 2. tmp_json 是 Cloudflare WARP 注册接口返回内容的临时 JSON 文件
     # 3. jq 已安装
     # 4. base64 / od / awk 可用；Alpine BusyBox 默认通常有
-    # 5. MTU 可选，默认 1420
+    # 5. MTU 可选，默认 1280
 
     public_key=$(jq -r '.config.peers[0].public_key // empty' "$tmp_json")
 
