@@ -4,7 +4,7 @@
 : "${CLOUDFLARED_TOKEN:?missing CLOUDFLARED_TOKEN}"
 : "${REALM_TOKEN:?missing REALM_TOKEN}"
 
-echo "start_v4 20260908"
+echo "start_v4 20260911"
 
 
 # ============================================================
