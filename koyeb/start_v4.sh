@@ -4,7 +4,7 @@
 : "${CLOUDFLARED_TOKEN:?missing CLOUDFLARED_TOKEN}"
 : "${REALM_TOKEN:?missing REALM_TOKEN}"
 
-echo "start_v4 20260920"
+echo "start_v4 20261012"
 
 
 # ============================================================
@@ -394,12 +394,7 @@ if [ -z "$private_key" ] \
     "outbounds": [
         {
             "tag": "direct",
-            "protocol": "freedom",
-            "streamSettings": {
-                "sockopt": {
-                    "tcpcongestion": "bbr"
-                }
-            }
+            "protocol": "freedom"
         }
     ]
 }
@@ -416,6 +411,12 @@ else
             {
                 "inboundTag": ["vless_ws_cf","vless_xhttp_cf"],
                 "outboundTag": "wg"
+            },
+            {
+                "domain": [
+                    "domain:fcc.gov"
+                ],
+                "outboundTag": "wg"
             }
         ]
     }
@@ -428,12 +429,7 @@ EOF
     "outbounds": [
         {
             "tag": "direct",
-            "protocol": "freedom",
-            "streamSettings": {
-                "sockopt": {
-                    "tcpcongestion": "bbr"
-                }
-            }
+            "protocol": "freedom"
         },
         {  
             "tag": "wg",
