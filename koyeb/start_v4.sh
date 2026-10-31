@@ -414,7 +414,8 @@ else
             },
             {
                 "domain": [
-                    "domain:fcc.gov"
+                    "domain:fcc.gov",
+                    "domain:koyeb.com"
                 ],
                 "outboundTag": "wg"
             }
