@@ -417,7 +417,7 @@ else
     "routing": {
         "rules": [
             {
-                "inboundTag": ["vless_ws_cf","vless_xhttp_cf"],
+                "inboundTag": ["vless_ws_cf","vless_xhttp_cf","hy2_realm_wg"],
                 "outboundTag": "wg"
             },
             {
