@@ -14,7 +14,7 @@ if [ ! -r "$HY2_CERT_FILE" ] || [ ! -r "$HY2_KEY_FILE" ]; then
     exit 1
 fi
 
-echo "start_v5 2026114"
+echo "start_v5 2026114v2"
 
 # ============================================================
 # [网络性能优化] Go 并行度
@@ -668,8 +668,6 @@ cat << EOF > /etc/xray/confs/inbounds.json
                 },
                 "tlsSettings": {
                     "alpn": ["h3"],
-                    "minVersion": "1.3",
-                    "maxVersion": "1.3",
                     "certificates": [
                         {
                             "certificateFile": "$HY2_CERT_FILE",
@@ -684,12 +682,12 @@ cat << EOF > /etc/xray/confs/inbounds.json
                             "settings": {
                                 "url": "realm+http://$REALM_TOKEN@127.0.0.1:5555/hy2",
                                 "stunServers": [
-                                    "stun.nextcloud.com:3478",
+                                    "stun.miwifi.com:3478",
                                     "stun.sip.us:3478",
                                     "global.stun.twilio.com:3478"
                                 ],
                                 "portMapping": {
-                                    "enabled": false
+                                    "enabled": true
                                 }
                             }
                         }
@@ -726,8 +724,6 @@ cat << EOF > /etc/xray/confs/inbounds.json
                 },
                 "tlsSettings": {
                     "alpn": ["h3"],
-                    "minVersion": "1.3",
-                    "maxVersion": "1.3",
                     "certificates": [
                         {
                             "certificateFile": "$HY2_CERT_FILE",
@@ -742,12 +738,12 @@ cat << EOF > /etc/xray/confs/inbounds.json
                             "settings": {
                                 "url": "realm+http://$REALM_TOKEN@127.0.0.1:5555/hy2-wg",
                                 "stunServers": [
-                                    "stun.nextcloud.com:3478",
+                                    "stun.miwifi.com:3478",
                                     "stun.sip.us:3478",
                                     "global.stun.twilio.com:3478"
                                 ],
                                 "portMapping": {
-                                    "enabled": false
+                                    "enabled": true
                                 }
                             }
                         }
