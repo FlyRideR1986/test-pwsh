@@ -247,7 +247,7 @@ else
     "routing": {
         "rules": [
             {
-                "inboundTag": ["vless_ws_cf","vless_xhttp_cf"],
+                "inboundTag": ["vless_ws_cf","vless_xhttp_cf","vless_enc_xhttp_cf"],
                 "outboundTag": "wg"
             },
             {
