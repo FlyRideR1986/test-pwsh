@@ -4,7 +4,7 @@
 : "${CLOUDFLARED_TOKEN:?missing CLOUDFLARED_TOKEN}"
 : "${REALM_TOKEN:?missing REALM_TOKEN}"
 
-echo "start_v4 20261031"
+echo "start_v4 20261114"
 
 
 # ============================================================
@@ -26,172 +26,10 @@ echo "start_v4 20261031"
 #
 # 如果外部已经显式指定 GOMAXPROCS，则尊重外部值。
 # ============================================================
-export GOMAXPROCS="${GOMAXPROCS:-1}"
+# export GOMAXPROCS="${GOMAXPROCS:-1}"
 
 
-# ============================================================
-# [新增] 网络性能优化：仅调整 Linux TCP/UDP 参数
-#
-# 当前 Koyeb Free：0.1 vCPU / 512 MB RAM。
-# 原则：QUIC/UDP 给足必要缓冲；TCP 保留自动调优；不盲目放大队列和内存。
-# 所有设置都 best-effort：容器无权限、内核不支持时直接跳过，不影响后续启动。
-# ============================================================
-echo "尝试 TCP / UDP 网络性能优化"
 
-net_log() {
-    echo "[NET] $*"
-}
-
-# 尝试写入 sysctl；失败只记录，不中断脚本。
-try_sysctl() {
-    key="$1"
-    value="$2"
-    old="$(sysctl -n "$key" 2> /dev/null || true)"
-
-    if [ -z "$old" ]; then
-        net_log "SKIP $key（参数不存在或当前容器不可见）"
-        return 0
-    fi
-
-    if sysctl -w "$key=$value" > /dev/null 2>&1; then
-        net_log "OK   $key: $old -> $(sysctl -n "$key" 2> /dev/null || true)"
-    else
-        net_log "FAIL $key=$value（权限不足 / 内核限制 / 容器限制）"
-    fi
-    return 0
-}
-
-# 单值整数参数只提高、不降低；便于以后复用到配置更高的 Docker/VPS。
-ensure_min_sysctl() {
-    key="$1"
-    target="$2"
-    current="$(sysctl -n "$key" 2> /dev/null || true)"
-
-    case "$current" in
-        '' | *[!0-9]*)
-            net_log "SKIP $key（不存在或无法解析：${current:-N/A}）"
-            return 0
-            ;;
-    esac
-
-    if [ "$current" -lt "$target" ]; then
-        try_sysctl "$key" "$target"
-    else
-        net_log "KEEP $key=$current"
-    fi
-}
-
-# tcp_rmem/tcp_wmem = min default max；只提高第三个 max。
-# 8 MiB 只是自动调节允许达到的上限，不会给每条连接预分配 8 MiB。
-ensure_tcp_buffer_max() {
-    key="$1"
-    target="$2"
-    old="$(sysctl -n "$key" 2> /dev/null || true)"
-    set -- $old
-
-    if [ "$#" -lt 3 ]; then
-        net_log "SKIP $key（不存在或无法解析：${old:-N/A}）"
-        return 0
-    fi
-
-    min="$1"
-    def="$2"
-    max="$3"
-    case "$max" in
-        *[!0-9]*)
-            net_log "SKIP $key（无法解析：$old）"
-            return 0
-            ;;
-    esac
-
-    if [ "$max" -lt "$target" ]; then
-        try_sysctl "$key" "$min $def $target"
-    else
-        net_log "KEEP $key=$old"
-    fi
-}
-
-network_tune() {
-    # 1) QUIC / UDP：cloudflared QUIC 最直接相关。
-    # quic-go 会主动申请更大的 UDP socket buffer，但受这两个系统上限约束。
-    # 7340032 bytes ≈ 7 MiB；这里只提高“可申请上限”，不是固定占用。
-    ensure_min_sysctl net.core.rmem_max 7340032
-    ensure_min_sysctl net.core.wmem_max 7340032
-
-    # 2) TCP：Xray direct TCP / Nginx TCP 使用 Linux TCP 栈。
-    # 保持自动接收窗口和 Window Scaling；最大自动窗口只保证到 8 MiB。
-    # 对 0.1 vCPU 已足够，不使用 16/32/64 MiB 的激进值。
-    try_sysctl net.ipv4.tcp_moderate_rcvbuf 1
-    try_sysctl net.ipv4.tcp_window_scaling 1
-    ensure_tcp_buffer_max net.ipv4.tcp_rmem 8388608
-    ensure_tcp_buffer_max net.ipv4.tcp_wmem 8388608
-
-    # 3) TCP PMTU black-hole 探测。
-    # 云网络若错误丢弃 ICMP Packet Too Big，可能出现“小包正常、大包卡住”。
-    # 设为 1 仅在检测到异常时启动探测；QUIC 自己有独立的路径 MTU 机制。
-    try_sysctl net.ipv4.tcp_mtu_probing 1
-
-    # 4) SACK：丢包时只重传真正缺失的数据段，现代 Linux 通常默认已开启。
-    try_sysctl net.ipv4.tcp_sack 1
-
-    # 5) Listener 队列只保证到 1024。
-    # 0.1 vCPU 的瓶颈是处理能力，不是排队容量；队列过大只会增加延迟和内存压力。
-    ensure_min_sysctl net.core.somaxconn 1024
-    ensure_min_sysctl net.ipv4.tcp_max_syn_backlog 1024
-    try_sysctl net.ipv4.tcp_syncookies 1
-
-    # 6) BBR：只有内核已经提供时才尝试，不加载模块。
-    # 仅影响 TCP；cloudflared QUIC 和 Xray WireGuard/UDP 不使用 Linux TCP BBR。
-    available_cc="$(sysctl -n net.ipv4.tcp_available_congestion_control 2> /dev/null || true)"
-    case " $available_cc " in
-        *" bbr "*) try_sysctl net.ipv4.tcp_congestion_control bbr ;;
-        *) net_log "SKIP BBR（当前可用算法：${available_cc:-unknown}）" ;;
-    esac
-
-    # 刻意不改：tcp_no_metrics_save、tcp_slow_start_after_idle、tcp_keepalive_*、
-    # udp_mem/tcp_mem、netdev_max_backlog、tcp_tw_reuse、fin_timeout/retries。
-    # 原因：这些要么不是通用增益，要么会增加 0.1 vCPU/512 MB 下的排队/定时器压力，
-    # 要么会改变连接生命周期和失败判定，不适合作为“无副作用的一键优化”。
-
-    # 只读取 UDP 错误计数，方便以后判断是否真的出现 socket buffer/CPU 丢包。
-    if [ -r /proc/net/snmp ]; then
-        grep '^Udp:' /proc/net/snmp 2> /dev/null || true
-    fi
-
-    # 7) 文件描述符上限
-    #
-    # socket 本质也是文件描述符。
-    # Nginx、Xray、cloudflared、realm 都会继承当前 shell 的 soft limit。
-    # 对 0.1 vCPU 不需要设置十万甚至百万级；
-    # 4096 已经远高于实际可持续连接规模。
-    current_nofile="$(ulimit -n 2> /dev/null || true)"
-
-    case "$current_nofile" in
-        '' | unlimited) ;;
-        *[!0-9]*) ;;
-        *)
-            if [ "$current_nofile" -lt 4096 ]; then
-                if ulimit -n 4096 2> /dev/null; then
-                    net_log "OK   NOFILE: $current_nofile -> $(ulimit -n)"
-                else
-                    net_log "FAIL NOFILE -> 4096（容器 hard limit 不允许）"
-                fi
-            else
-                net_log "KEEP NOFILE=$current_nofile"
-            fi
-            ;;
-    esac
-
-    net_log "网络性能优化尝试完成"
-    return 0
-}
-
-if command -v sysctl > /dev/null 2>&1; then
-    network_tune || true
-else
-    net_log "SKIP：当前容器没有 sysctl 命令"
-fi
-# ====================== [新增网络优化结束] ======================
 
 # 16个默认uuid列
 uuid0="00000000-0000-0000-0000-000000000000"
