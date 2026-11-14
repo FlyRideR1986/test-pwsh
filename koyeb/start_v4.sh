@@ -474,6 +474,86 @@ cat << EOF > /etc/xray/confs/inbounds.json
                     "mode": "auto"
                 }
             }
+        },
+        {
+            "tag": "vless_enc_xhttp",
+            "listen": "127.0.0.1",
+            "port": 3333,
+            "protocol": "vless",
+            "settings": {
+                "decryption": "$decryption",
+                "flow": "xtls-rprx-vision",
+                "clients": [
+                    {
+                        "id": "$uuida"
+                    },
+                    {
+                        "id": "$uuidb"
+                    },
+                    {
+                        "id": "$uuidc"
+                    },
+                    {
+                        "id": "$uuidd"
+                    },
+                    {
+                        "id": "$uuide"
+                    },
+                    {
+                        "id": "$uuidf"
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "xhttpSettings": {
+                    "path": "/xhttp",
+                    "mode": "auto"
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        },
+        {
+            "tag": "vless_enc_xhttp_cf",
+            "listen": "127.0.0.1",
+            "port": 4444,
+            "protocol": "vless",
+            "settings": {
+                "decryption": "$decryption",
+                "flow": "xtls-rprx-vision",
+                "clients": [
+                    {
+                        "id": "$uuida"
+                    },
+                    {
+                        "id": "$uuidb"
+                    },
+                    {
+                        "id": "$uuidc"
+                    },
+                    {
+                        "id": "$uuidd"
+                    },
+                    {
+                        "id": "$uuide"
+                    },
+                    {
+                        "id": "$uuidf"
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "xhttpSettings": {
+                    "path": "/xhttp2cf",
+                    "mode": "auto"
+                }
+            }
         }
     ]
 }
@@ -693,6 +773,55 @@ http {
         # /xhttp2cf/... -> Xray 127.0.0.1:44444
         location ~ ^/xhttp2cf(?:/|$) {
             proxy_pass http://127.0.0.1:44444;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+            proxy_set_header Connection "";
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_cache off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+
+            add_header X-Accel-Buffering no always;
+        }
+
+        # Koyeb enc路线：
+        # /enc/... -> Xray 127.0.0.1:3333
+        location ~ ^/enc(?:/|$) {
+            proxy_pass http://127.0.0.1:3333;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+
+            # XHTTP 不是 WebSocket，不传 Upgrade
+            proxy_set_header Connection "";
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # 禁止缓存和请求缓冲，确保流式传输
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_cache off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+
+            add_header X-Accel-Buffering no always;
+        }
+
+        # Cloudflared enc备选路线：
+        # /enc2cf/... -> Xray 127.0.0.1:4444
+        location ~ ^/enc2cf(?:/|$) {
+            proxy_pass http://127.0.0.1:4444;
 
             proxy_http_version 1.1;
 
