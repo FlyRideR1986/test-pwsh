@@ -507,7 +507,7 @@ cat << EOF > /etc/xray/confs/inbounds.json
             "streamSettings": {
                 "network": "xhttp",
                 "xhttpSettings": {
-                    "path": "/xhttp",
+                    "path": "/enc",
                     "mode": "auto"
                 }
             },
@@ -550,7 +550,7 @@ cat << EOF > /etc/xray/confs/inbounds.json
             "streamSettings": {
                 "network": "xhttp",
                 "xhttpSettings": {
-                    "path": "/xhttp2cf",
+                    "path": "/enc2cf",
                     "mode": "auto"
                 }
             }
