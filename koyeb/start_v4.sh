@@ -4,7 +4,7 @@
 : "${CLOUDFLARED_TOKEN:?missing CLOUDFLARED_TOKEN}"
 : "${REALM_TOKEN:?missing REALM_TOKEN}"
 
-echo "start_v4 20261121 geodata"
+echo "start_v4 20261121 cn go wg"
 
 
 # ============================================================
@@ -255,6 +255,7 @@ else
     cat << EOF > /etc/xray/confs/routing.json
 {
     "routing": {
+        "domainStrategy": "AsIs",
         "rules": [
             {
                 "inboundTag": ["vless_ws_cf","vless_xhttp_cf","vless_enc_xhttp_cf"],
@@ -266,6 +267,10 @@ else
                     "domain:koyeb.com",
                     "geosite:google-gemini"
                 ],
+                "outboundTag": "wg"
+            },
+            {
+                "ip": ["geoip:cn"],
                 "outboundTag": "wg"
             }
         ]
