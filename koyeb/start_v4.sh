@@ -4,7 +4,7 @@
 : "${CLOUDFLARED_TOKEN:?missing CLOUDFLARED_TOKEN}"
 : "${REALM_TOKEN:?missing REALM_TOKEN}"
 
-echo "start_v4 20261114 enc"
+echo "start_v4 20261121 geodata"
 
 
 # ============================================================
@@ -74,6 +74,11 @@ unzip /xray/xray.zip -d /xray
 mv /xray/xray /usr/local/bin/xray
 chmod +x /usr/local/bin/xray
 
+mkdir -p /etc/xray/confs
+export XRAY_LOCATION_ASSET=/etc/xray/confs
+mv /xray/geoip.dat /etc/xray/confs/geoip.dat
+mv /xray/geosite.dat /etc/xray/confs/geosite.dat
+
 rm -rf /xray
 
 # ========== warp-reg.sh for apline
@@ -127,7 +132,7 @@ register_warp() {
         -H 'Content-Type: application/json' \
         --data "$payload" \
         -o "$tmp_json" \
-        || err 'Cloudflare WARP registration request failed'
+        || { echo "WARP registration request failed" >&2; return 1; }
 
     jq -e '
         (.config.client_id // "" | length > 0) and
@@ -136,7 +141,8 @@ register_warp() {
         (.config.interface.addresses.v4 // "" | length > 0)
     ' "$tmp_json" > /dev/null || {
         cat "$tmp_json" >&2
-        err 'unexpected WARP registration response'
+        echo "unexpected WARP registration response" >&2
+        return 1
     }
 }
 
@@ -206,9 +212,13 @@ assign_warp_vars() {
 main() {
     check_deps
     gen_keys
-    register_warp
-    make_reserved
-    assign_warp_vars
+
+    if register_warp; then
+        make_reserved
+        assign_warp_vars
+    else
+        echo "WARP registration failed, falling back to direct" >&2
+    fi
 }
 
 main "$@"
@@ -253,12 +263,32 @@ else
             {
                 "domain": [
                     "domain:fcc.gov",
-                    "domain:koyeb.com"
+                    "domain:koyeb.com",
+                    "geosite:google-gemini"
                 ],
                 "outboundTag": "wg"
             }
         ]
     }
+}
+EOF
+
+    # geo文件
+    cat << EOF > /etc/xray/confs/geodata.json
+{
+  "geodata": {
+    "cron": "0 4 * * *",
+    "assets": [
+      {
+        "url": "https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geoip-lite.dat.gz",
+        "file": "geoip.dat"
+      },
+      {
+        "url": "https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geosite.dat.gz",
+        "file": "geosite.dat"
+      }
+    ]
+  }
 }
 EOF
 
@@ -940,7 +970,7 @@ cat << EOF > /etc/crontabs/root
 
 */5 * * * pgrep -x "/usr/local/bin/cloudflared" > /dev/null || nohup /usr/local/bin/cloudflared tunnel --edge-ip-version 4 --protocol auto --loglevel fatal run --token "$CLOUDFLARED_TOKEN" > /dev/null 2>&1 &
 
-*/5 * * * pgrep -x "/usr/local/bin/xray" > /dev/null || nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
+*/5 * * * pgrep -x "/usr/local/bin/xray" > /dev/null || XRAY_LOCATION_ASSET=/etc/xray/confs nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
 
 */5 * * * pgrep -x "/usr/local/bin/realm" > /dev/null || /usr/local/bin/realm --token "$REALM_TOKEN" --listen 127.0.0.1:5555 > /dev/null 2>&1 &
 
