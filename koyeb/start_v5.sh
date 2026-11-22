@@ -3,18 +3,10 @@
 # 从环境变量中获取 CLOUDFLARED_TOKEN，如果没有则退出脚本
 : "${CLOUDFLARED_TOKEN:?missing CLOUDFLARED_TOKEN}"
 : "${REALM_TOKEN:?missing REALM_TOKEN}"
+: "${CF_SNI:?missing CF_SNI}"
+: "${CF_UUID:?missing CF_UUID}"
 
-# 已经导入的证书
-HY2_CERT_FILE="${HY2_CERT_FILE:-/etc/hy2/hy2.crt}"
-HY2_KEY_FILE="${HY2_KEY_FILE:-/etc/hy2/hy2.key}"
-
-# 检查证书
-if [ ! -r "$HY2_CERT_FILE" ] || [ ! -r "$HY2_KEY_FILE" ]; then
-    echo "HY2 TLS certificate or key not found"
-    exit 1
-fi
-
-echo "start_v5 2026114v2"
+echo "start_v5 20261122 cf"
 
 # ============================================================
 # [网络性能优化] Go 并行度
@@ -35,171 +27,7 @@ echo "start_v5 2026114v2"
 #
 # 如果外部已经显式指定 GOMAXPROCS，则尊重外部值。
 # ============================================================
-export GOMAXPROCS="${GOMAXPROCS:-1}"
-
-# ============================================================
-# [新增] 网络性能优化：仅调整 Linux TCP/UDP 参数
-#
-# 当前 Koyeb Free：0.1 vCPU / 512 MB RAM。
-# 原则：QUIC/UDP 给足必要缓冲；TCP 保留自动调优；不盲目放大队列和内存。
-# 所有设置都 best-effort：容器无权限、内核不支持时直接跳过，不影响后续启动。
-# ============================================================
-echo "尝试 TCP / UDP 网络性能优化"
-
-net_log() {
-    echo "[NET] $*"
-}
-
-# 尝试写入 sysctl；失败只记录，不中断脚本。
-try_sysctl() {
-    key="$1"
-    value="$2"
-    old="$(sysctl -n "$key" 2> /dev/null || true)"
-
-    if [ -z "$old" ]; then
-        net_log "SKIP $key（参数不存在或当前容器不可见）"
-        return 0
-    fi
-
-    if sysctl -w "$key=$value" > /dev/null 2>&1; then
-        net_log "OK   $key: $old -> $(sysctl -n "$key" 2> /dev/null || true)"
-    else
-        net_log "FAIL $key=$value（权限不足 / 内核限制 / 容器限制）"
-    fi
-    return 0
-}
-
-# 单值整数参数只提高、不降低；便于以后复用到配置更高的 Docker/VPS。
-ensure_min_sysctl() {
-    key="$1"
-    target="$2"
-    current="$(sysctl -n "$key" 2> /dev/null || true)"
-
-    case "$current" in
-        '' | *[!0-9]*)
-            net_log "SKIP $key（不存在或无法解析：${current:-N/A}）"
-            return 0
-            ;;
-    esac
-
-    if [ "$current" -lt "$target" ]; then
-        try_sysctl "$key" "$target"
-    else
-        net_log "KEEP $key=$current"
-    fi
-}
-
-# tcp_rmem/tcp_wmem = min default max；只提高第三个 max。
-# 8 MiB 只是自动调节允许达到的上限，不会给每条连接预分配 8 MiB。
-ensure_tcp_buffer_max() {
-    key="$1"
-    target="$2"
-    old="$(sysctl -n "$key" 2> /dev/null || true)"
-    set -- $old
-
-    if [ "$#" -lt 3 ]; then
-        net_log "SKIP $key（不存在或无法解析：${old:-N/A}）"
-        return 0
-    fi
-
-    min="$1"
-    def="$2"
-    max="$3"
-    case "$max" in
-        *[!0-9]*)
-            net_log "SKIP $key（无法解析：$old）"
-            return 0
-            ;;
-    esac
-
-    if [ "$max" -lt "$target" ]; then
-        try_sysctl "$key" "$min $def $target"
-    else
-        net_log "KEEP $key=$old"
-    fi
-}
-
-network_tune() {
-    # 1) QUIC / UDP：cloudflared QUIC 最直接相关。
-    # quic-go 会主动申请更大的 UDP socket buffer，但受这两个系统上限约束。
-    # 7340032 bytes ≈ 7 MiB；这里只提高“可申请上限”，不是固定占用。
-    ensure_min_sysctl net.core.rmem_max 7340032
-    ensure_min_sysctl net.core.wmem_max 7340032
-
-    # 2) TCP：Xray direct TCP / Nginx TCP 使用 Linux TCP 栈。
-    # 保持自动接收窗口和 Window Scaling；最大自动窗口只保证到 8 MiB。
-    # 对 0.1 vCPU 已足够，不使用 16/32/64 MiB 的激进值。
-    try_sysctl net.ipv4.tcp_moderate_rcvbuf 1
-    try_sysctl net.ipv4.tcp_window_scaling 1
-    ensure_tcp_buffer_max net.ipv4.tcp_rmem 8388608
-    ensure_tcp_buffer_max net.ipv4.tcp_wmem 8388608
-
-    # 3) TCP PMTU black-hole 探测。
-    # 云网络若错误丢弃 ICMP Packet Too Big，可能出现“小包正常、大包卡住”。
-    # 设为 1 仅在检测到异常时启动探测；QUIC 自己有独立的路径 MTU 机制。
-    try_sysctl net.ipv4.tcp_mtu_probing 1
-
-    # 4) SACK：丢包时只重传真正缺失的数据段，现代 Linux 通常默认已开启。
-    try_sysctl net.ipv4.tcp_sack 1
-
-    # 5) Listener 队列只保证到 1024。
-    # 0.1 vCPU 的瓶颈是处理能力，不是排队容量；队列过大只会增加延迟和内存压力。
-    ensure_min_sysctl net.core.somaxconn 1024
-    ensure_min_sysctl net.ipv4.tcp_max_syn_backlog 1024
-    try_sysctl net.ipv4.tcp_syncookies 1
-
-    # 6) BBR：只有内核已经提供时才尝试，不加载模块。
-    # 仅影响 TCP；cloudflared QUIC 和 Xray WireGuard/UDP 不使用 Linux TCP BBR。
-    available_cc="$(sysctl -n net.ipv4.tcp_available_congestion_control 2> /dev/null || true)"
-    case " $available_cc " in
-        *" bbr "*) try_sysctl net.ipv4.tcp_congestion_control bbr ;;
-        *) net_log "SKIP BBR（当前可用算法：${available_cc:-unknown}）" ;;
-    esac
-
-    # 刻意不改：tcp_no_metrics_save、tcp_slow_start_after_idle、tcp_keepalive_*、
-    # udp_mem/tcp_mem、netdev_max_backlog、tcp_tw_reuse、fin_timeout/retries。
-    # 原因：这些要么不是通用增益，要么会增加 0.1 vCPU/512 MB 下的排队/定时器压力，
-    # 要么会改变连接生命周期和失败判定，不适合作为“无副作用的一键优化”。
-
-    # 只读取 UDP 错误计数，方便以后判断是否真的出现 socket buffer/CPU 丢包。
-    if [ -r /proc/net/snmp ]; then
-        grep '^Udp:' /proc/net/snmp 2> /dev/null || true
-    fi
-
-    # 7) 文件描述符上限
-    #
-    # socket 本质也是文件描述符。
-    # Nginx、Xray、cloudflared、realm 都会继承当前 shell 的 soft limit。
-    # 对 0.1 vCPU 不需要设置十万甚至百万级；
-    # 4096 已经远高于实际可持续连接规模。
-    current_nofile="$(ulimit -n 2> /dev/null || true)"
-
-    case "$current_nofile" in
-        '' | unlimited) ;;
-        *[!0-9]*) ;;
-        *)
-            if [ "$current_nofile" -lt 4096 ]; then
-                if ulimit -n 4096 2> /dev/null; then
-                    net_log "OK   NOFILE: $current_nofile -> $(ulimit -n)"
-                else
-                    net_log "FAIL NOFILE -> 4096（容器 hard limit 不允许）"
-                fi
-            else
-                net_log "KEEP NOFILE=$current_nofile"
-            fi
-            ;;
-    esac
-
-    net_log "网络性能优化尝试完成"
-    return 0
-}
-
-if command -v sysctl > /dev/null 2>&1; then
-    network_tune || true
-else
-    net_log "SKIP：当前容器没有 sysctl 命令"
-fi
-# ====================== [新增网络优化结束] ======================
+# export GOMAXPROCS="${GOMAXPROCS:-1}"
 
 # 16个默认uuid列
 uuid0="00000000-0000-0000-0000-000000000000"
@@ -219,9 +47,9 @@ uuidd="dddddddd-dddd-dddd-dddd-dddddddddddd"
 uuide="eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
 uuidf="ffffffff-ffff-ffff-ffff-ffffffffffff"
 
-# # xray vless enc设定
-# decryption="mlkem768x25519plus.native.600s.YpQG-Oct_pBDuMd0HvPhMaH_JMsq1qJjkLEHyDaGuu9sy3kIe5EOKIZPrGahoqLtTRdCZRXWM8RkxMTqLP2Obw"
-# encryption="mlkem768x25519plus.native.0rtt.yxqHhit6BVJpAHcvHisZ7DG8ctVXLPSFiotDrxmK18acqOYn4Mk8xZi4iqFnhQFLxUME-ZoMe9dc2LZW9nahmrvIu2xYAya5ZgYrgCox-LhIC6OZeym1FWitQ9NIz8MkPYoYTrMaXlKGozfLInknX7E4vPyRrhR7S2Gul4kuT6aUj2JiSSJZPVAtXGuwexA0cNjOUqF6Z7AYNSkojcF2aSJxm5hoaAFRIbEQqvqy5iib8FJRyCvHNqAFnVjFPzo8ZjMaNCgdoWTOUPkbsUaYlqewwJSUfAOneOwOxpcuRAIZKGZkYQLKtfHNUKknSAWKD9FdAgKUxVE8vKuzSRTKnMW2MJIkFNepeNWvwnQq2inF7_O0-nyq7KR1nVVv29ShM-w9UEWFOTBoD7AY8INlLtaddskjl_ci6odvJCalyueuAGlwZTmqjBicl9BNMJgCI2JSbKV9CpaTXXuZLnaLO0xHNZe20IkhcCiIsRAi-1JctKUXXtwoFDCd6HwRmutFsSgkStCwjvpDMSo7Jrksvqp9I_R1CQgf0ACBkhDAiYYjeLmxidNSutAz3TBhQVI5xkS1dPya-SUg2GCGRwsTxZzDlUeksEyW64kN9FOoTwYPNKeST5NJyPEOS0S_UPu7HDwOmkC4_VdOu_NhgbcfUCbC56tsUyuJSTq_PuQJhexIItiod1mhWPBNd1miKzpWXBgAF_Jx1uoGr3CANoefxZepTGssNoKwClgTQlihmbI_7Qt72rdjvWEkVZYw89rEq3d1dYBQ4RuMMspOk-dyaekyBLB3uhEATdZSONIz1Tq1zPYYQ5w92MmH68QL96uuUKLOI0Cpvui_r3cF5SQVwsqjJNnHG_lVtcuilUxoipsfPqGoZ3RP1ThfFZwU9KnPUkW5_kg0bjpYkkFmeDgXXBxntKCVOOFn0QufCfJQyXMxdykFDct_Vrsc_iAPPIOyDmZ4bNh9iuHID6C3I1touXd2jEN3JugCvPLD2yGIAxeemDFaEWuDy3MDdthyQHxKgPmyziMulXug1-mWzihRL6GUsaLA3ffMJ4UPH3y3y9wzXSGnnpSIFPvO3YmL4bAV4ETEtuWnM3J-rGsMOCG36BhfRQVvlTBxqyFRFgzLMlGi5LY2plxV1spUaNsc0aaGCwwvTpp67tCaz7KEOniCFcA8LzZP7ummtdMohxq2N3Rty5dL14SC91i9ZQg7_wijylSTT3zFyWZONLF-Nve3eoO35VZsM2PEjmN2EtCYPYkXB8JW26GOJCVBihtTiIN4dxAcWRJWciNzTMMIxecJnDZ271VLFPJHMMMG1XbDIBvIFOIqy1g-CiRtBmFujPQWvOHPGrtHuSN5iPG3eSCM20NeM_ymWflkCuVz6MQ4YaRPS8IqwtB1kIBUDYJUxxC93spp-NB1TJlvzaLOYshoHqJuSUSx8akMAciG1SbDelhWLaWuN7LCxmtn8PJ3ooqX-iSjwyrJsftMBDoka4sI_CCINAIHWlwlsapr1dFVGYcwzddSFxgNFOyRmeIOmBkPnoN65ADF6ACDC0AbTxNhYepTmsM-Wxc2yM67bhLbVf4"
+# xray vless enc设定
+decryption="mlkem768x25519plus.native.600s.YpQG-Oct_pBDuMd0HvPhMaH_JMsq1qJjkLEHyDaGuu9sy3kIe5EOKIZPrGahoqLtTRdCZRXWM8RkxMTqLP2Obw"
+encryption="mlkem768x25519plus.native.0rtt.yxqHhit6BVJpAHcvHisZ7DG8ctVXLPSFiotDrxmK18acqOYn4Mk8xZi4iqFnhQFLxUME-ZoMe9dc2LZW9nahmrvIu2xYAya5ZgYrgCox-LhIC6OZeym1FWitQ9NIz8MkPYoYTrMaXlKGozfLInknX7E4vPyRrhR7S2Gul4kuT6aUj2JiSSJZPVAtXGuwexA0cNjOUqF6Z7AYNSkojcF2aSJxm5hoaAFRIbEQqvqy5iib8FJRyCvHNqAFnVjFPzo8ZjMaNCgdoWTOUPkbsUaYlqewwJSUfAOneOwOxpcuRAIZKGZkYQLKtfHNUKknSAWKD9FdAgKUxVE8vKuzSRTKnMW2MJIkFNepeNWvwnQq2inF7_O0-nyq7KR1nVVv29ShM-w9UEWFOTBoD7AY8INlLtaddskjl_ci6odvJCalyueuAGlwZTmqjBicl9BNMJgCI2JSbKV9CpaTXXuZLnaLO0xHNZe20IkhcCiIsRAi-1JctKUXXtwoFDCd6HwRmutFsSgkStCwjvpDMSo7Jrksvqp9I_R1CQgf0ACBkhDAiYYjeLmxidNSutAz3TBhQVI5xkS1dPya-SUg2GCGRwsTxZzDlUeksEyW64kN9FOoTwYPNKeST5NJyPEOS0S_UPu7HDwOmkC4_VdOu_NhgbcfUCbC56tsUyuJSTq_PuQJhexIItiod1mhWPBNd1miKzpWXBgAF_Jx1uoGr3CANoefxZepTGssNoKwClgTQlihmbI_7Qt72rdjvWEkVZYw89rEq3d1dYBQ4RuMMspOk-dyaekyBLB3uhEATdZSONIz1Tq1zPYYQ5w92MmH68QL96uuUKLOI0Cpvui_r3cF5SQVwsqjJNnHG_lVtcuilUxoipsfPqGoZ3RP1ThfFZwU9KnPUkW5_kg0bjpYkkFmeDgXXBxntKCVOOFn0QufCfJQyXMxdykFDct_Vrsc_iAPPIOyDmZ4bNh9iuHID6C3I1touXd2jEN3JugCvPLD2yGIAxeemDFaEWuDy3MDdthyQHxKgPmyziMulXug1-mWzihRL6GUsaLA3ffMJ4UPH3y3y9wzXSGnnpSIFPvO3YmL4bAV4ETEtuWnM3J-rGsMOCG36BhfRQVvlTBxqyFRFgzLMlGi5LY2plxV1spUaNsc0aaGCwwvTpp67tCaz7KEOniCFcA8LzZP7ummtdMohxq2N3Rty5dL14SC91i9ZQg7_wijylSTT3zFyWZONLF-Nve3eoO35VZsM2PEjmN2EtCYPYkXB8JW26GOJCVBihtTiIN4dxAcWRJWciNzTMMIxecJnDZ271VLFPJHMMMG1XbDIBvIFOIqy1g-CiRtBmFujPQWvOHPGrtHuSN5iPG3eSCM20NeM_ymWflkCuVz6MQ4YaRPS8IqwtB1kIBUDYJUxxC93spp-NB1TJlvzaLOYshoHqJuSUSx8akMAciG1SbDelhWLaWuN7LCxmtn8PJ3ooqX-iSjwyrJsftMBDoka4sI_CCINAIHWlwlsapr1dFVGYcwzddSFxgNFOyRmeIOmBkPnoN65ADF6ACDC0AbTxNhYepTmsM-Wxc2yM67bhLbVf4"
 
 # ========== 安装curl jq unzip nginx wireguard-tools ca-certificates
 echo "安装curl jq unzip nginx wireguard-tools ca-certificates"
@@ -243,6 +71,11 @@ unzip /xray/xray.zip -d /xray
 
 mv /xray/xray /usr/local/bin/xray
 chmod +x /usr/local/bin/xray
+
+mkdir -p /etc/xray/confs
+export XRAY_LOCATION_ASSET=/etc/xray/confs
+mv /xray/geoip.dat /etc/xray/confs/geoip.dat
+mv /xray/geosite.dat /etc/xray/confs/geosite.dat
 
 rm -rf /xray
 
@@ -297,7 +130,10 @@ register_warp() {
         -H 'Content-Type: application/json' \
         --data "$payload" \
         -o "$tmp_json" \
-        || err 'Cloudflare WARP registration request failed'
+        || {
+            echo "WARP registration request failed" >&2
+            return 1
+        }
 
     jq -e '
         (.config.client_id // "" | length > 0) and
@@ -306,7 +142,8 @@ register_warp() {
         (.config.interface.addresses.v4 // "" | length > 0)
     ' "$tmp_json" > /dev/null || {
         cat "$tmp_json" >&2
-        err 'unexpected WARP registration response'
+        echo "unexpected WARP registration response" >&2
+        return 1
     }
 }
 
@@ -376,9 +213,13 @@ assign_warp_vars() {
 main() {
     check_deps
     gen_keys
-    register_warp
-    make_reserved
-    assign_warp_vars
+
+    if register_warp; then
+        make_reserved
+        assign_warp_vars
+    else
+        echo "WARP registration failed, falling back to direct" >&2
+    fi
 }
 
 main "$@"
@@ -403,8 +244,69 @@ if [ -z "$private_key" ] \
         {
             "tag": "direct",
             "protocol": "freedom"
+        },
+        {
+            "tag": "cf",
+            "protocol": "vless",
+            "settings": {
+                "address": "$KOYEB_PUBLIC_DOMAIN",
+                "port": 443,
+                "id": "$CF_UUID",
+                "encryption": "none"
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "security": "tls",
+                "tlsSettings": {
+                    "allowInsecure": false,
+                    "serverName": "$CF_SNI",
+                    "fingerprint": "chrome",
+                    "echConfigList": "cloudflare-ech.com+https://1.1.1.1/dns-query",
+                    "echForceQuery": "full"
+                },
+                "xhttpSettings": {
+                    "mode": "stream-one",
+                    "extra": {
+                        "xPaddingPlacement": "queryInHeader",
+                        "xPaddingKey": "_234567",
+                        "xPaddingHeader": "234567",
+                        "xPaddingObfsMode": true,
+                        "xPaddingMethod": "tokenish"
+                    },
+                    "path": "/"
+                }
+            }
         }
     ]
+}
+EOF
+
+    # 路由文件
+    cat << EOF > /etc/xray/confs/routing.json
+{
+    "routing": {
+        "domainStrategy": "AsIs",
+        "rules": [
+            {
+                "domain": [
+                    "geosite:youtube"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "domain": [
+                    "domain:fcc.gov",
+                    "domain:koyeb.com",
+                    "geosite:google"
+                ],
+                "outboundTag": "cf"
+            },
+            {
+                "ip": ["geoip:cn"],
+                "outboundTag": "cf"
+            }
+        ]
+    }
 }
 EOF
 
@@ -415,17 +317,37 @@ else
     cat << EOF > /etc/xray/confs/routing.json
 {
     "routing": {
+        "domainStrategy": "AsIs",
         "rules": [
             {
-                "inboundTag": ["vless_ws_cf","vless_xhttp_cf","hy2_realm_wg"],
+                "inboundTag": ["vless_ws","vless_xhttp","vless_enc_xhttp"],
+                "domain": [
+                    "geosite:youtube"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "inboundTag": ["vless_ws","vless_xhttp","vless_enc_xhttp"],
+                "domain": [
+                    "domain:fcc.gov",
+                    "domain:koyeb.com",
+                    "geosite:google"
+                ],
+                "outboundTag": "cf"
+            },
+            {
+                "inboundTag": ["vless_ws","vless_xhttp","vless_enc_xhttp"],
+                "ip": ["geoip:cn"],
+                "outboundTag": "cf"
+            },
+            {
+                "inboundTag": ["vless_ws_cf","vless_xhttp_cf","vless_enc_xhttp_cf"],
+                "ip": ["geoip:cloudflare"],
                 "outboundTag": "wg"
             },
             {
-                "domain": [
-                    "domain:fcc.gov",
-                    "domain:koyeb.com"
-                ],
-                "outboundTag": "wg"
+                "inboundTag": ["vless_ws_cf","vless_xhttp_cf","vless_enc_xhttp_cf"],
+                "outboundTag": "cf"
             }
         ]
     }
@@ -439,6 +361,38 @@ EOF
         {
             "tag": "direct",
             "protocol": "freedom"
+        },
+        {
+            "tag": "cf",
+            "protocol": "vless",
+            "settings": {
+                "address": "$KOYEB_PUBLIC_DOMAIN",
+                "port": 443,
+                "id": "$CF_UUID",
+                "encryption": "none"
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "security": "tls",
+                "tlsSettings": {
+                    "allowInsecure": false,
+                    "serverName": "$CF_SNI",
+                    "fingerprint": "chrome",
+                    "echConfigList": "cloudflare-ech.com+https://1.1.1.1/dns-query",
+                    "echForceQuery": "full"
+                },
+                "xhttpSettings": {
+                    "mode": "stream-one",
+                    "extra": {
+                        "xPaddingPlacement": "queryInHeader",
+                        "xPaddingKey": "_234567",
+                        "xPaddingHeader": "234567",
+                        "xPaddingObfsMode": true,
+                        "xPaddingMethod": "tokenish"
+                    },
+                    "path": "/"
+                }
+            }
         },
         {  
             "tag": "wg",
@@ -462,6 +416,25 @@ EOF
 EOF
 
 fi
+
+# geo文件
+cat << EOF > /etc/xray/confs/geodata.json
+{
+  "geodata": {
+    "cron": "0 4 * * *",
+    "assets": [
+      {
+        "url": "https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geoip-lite.dat.gz",
+        "file": "geoip.dat"
+      },
+      {
+        "url": "https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geosite.dat.gz",
+        "file": "geosite.dat"
+      }
+    ]
+  }
+}
+EOF
 
 # 入站文件
 cat << EOF > /etc/xray/confs/inbounds.json
@@ -646,52 +619,39 @@ cat << EOF > /etc/xray/confs/inbounds.json
             }
         },
         {
-            "tag": "hy2_realm_direct",
-            "listen": "0.0.0.0",
+            "tag": "vless_enc_xhttp",
+            "listen": "127.0.0.1",
             "port": 3333,
-            "protocol": "hysteria",
+            "protocol": "vless",
             "settings": {
-                "version": 2,
-                "users": [
+                "decryption": "$decryption",
+                "flow": "xtls-rprx-vision",
+                "clients": [
                     {
-                        "auth": "$REALM_TOKEN",
-                        "level": 0
+                        "id": "$uuida"
+                    },
+                    {
+                        "id": "$uuidb"
+                    },
+                    {
+                        "id": "$uuidc"
+                    },
+                    {
+                        "id": "$uuidd"
+                    },
+                    {
+                        "id": "$uuide"
+                    },
+                    {
+                        "id": "$uuidf"
                     }
                 ]
             },
             "streamSettings": {
-                "method": "hysteria",
-                "security": "tls",
-                "hysteriaSettings": {
-                    "version": 2,
-                    "udpIdleTimeout": 60
-                },
-                "tlsSettings": {
-                    "alpn": ["h3"],
-                    "certificates": [
-                        {
-                            "certificateFile": "$HY2_CERT_FILE",
-                            "keyFile": "$HY2_KEY_FILE"
-                        }
-                    ]
-                },
-                "finalmask": {
-                    "udp": [
-                        {
-                            "type": "realm",
-                            "settings": {
-                                "url": "realm+http://$REALM_TOKEN@127.0.0.1:5555/hy2",
-                                "stunServers": [
-                                    "stun.miwifi.com:3478",
-                                    "stun.sip.us:3478",
-                                    "global.stun.twilio.com:3478"
-                                ],
-                                "portMapping": {
-                                    "enabled": true
-                                }
-                            }
-                        }
-                    ]
+                "network": "xhttp",
+                "xhttpSettings": {
+                    "path": "/enc",
+                    "mode": "auto"
                 }
             },
             "sniffing": {
@@ -702,52 +662,39 @@ cat << EOF > /etc/xray/confs/inbounds.json
             }
         },
         {
-            "tag": "hy2_realm_wg",
-            "listen": "0.0.0.0",
+            "tag": "vless_enc_xhttp_cf",
+            "listen": "127.0.0.1",
             "port": 4444,
-            "protocol": "hysteria",
+            "protocol": "vless",
             "settings": {
-                "version": 2,
-                "users": [
+                "decryption": "$decryption",
+                "flow": "xtls-rprx-vision",
+                "clients": [
                     {
-                        "auth": "$REALM_TOKEN",
-                        "level": 0
+                        "id": "$uuida"
+                    },
+                    {
+                        "id": "$uuidb"
+                    },
+                    {
+                        "id": "$uuidc"
+                    },
+                    {
+                        "id": "$uuidd"
+                    },
+                    {
+                        "id": "$uuide"
+                    },
+                    {
+                        "id": "$uuidf"
                     }
                 ]
             },
             "streamSettings": {
-                "method": "hysteria",
-                "security": "tls",
-                "hysteriaSettings": {
-                    "version": 2,
-                    "udpIdleTimeout": 60
-                },
-                "tlsSettings": {
-                    "alpn": ["h3"],
-                    "certificates": [
-                        {
-                            "certificateFile": "$HY2_CERT_FILE",
-                            "keyFile": "$HY2_KEY_FILE"
-                        }
-                    ]
-                },
-                "finalmask": {
-                    "udp": [
-                        {
-                            "type": "realm",
-                            "settings": {
-                                "url": "realm+http://$REALM_TOKEN@127.0.0.1:5555/hy2-wg",
-                                "stunServers": [
-                                    "stun.miwifi.com:3478",
-                                    "stun.sip.us:3478",
-                                    "global.stun.twilio.com:3478"
-                                ],
-                                "portMapping": {
-                                    "enabled": true
-                                }
-                            }
-                        }
-                    ]
+                "network": "xhttp",
+                "xhttpSettings": {
+                    "path": "/enc2cf",
+                    "mode": "auto"
                 }
             }
         }
@@ -988,6 +935,55 @@ http {
             add_header X-Accel-Buffering no always;
         }
 
+        # Koyeb enc路线：
+        # /enc/... -> Xray 127.0.0.1:3333
+        location ~ ^/enc(?:/|$) {
+            proxy_pass http://127.0.0.1:3333;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+
+            # XHTTP 不是 WebSocket，不传 Upgrade
+            proxy_set_header Connection "";
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # 禁止缓存和请求缓冲，确保流式传输
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_cache off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+
+            add_header X-Accel-Buffering no always;
+        }
+
+        # Cloudflared enc备选路线：
+        # /enc2cf/... -> Xray 127.0.0.1:4444
+        location ~ ^/enc2cf(?:/|$) {
+            proxy_pass http://127.0.0.1:4444;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $http_host;
+            proxy_set_header Connection "";
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_cache off;
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+
+            add_header X-Accel-Buffering no always;
+        }
+
 
         # =========================================================
         # Docker Hub Token Service
@@ -1087,7 +1083,7 @@ cat << EOF > /etc/crontabs/root
 
 */5 * * * pgrep -x "/usr/local/bin/cloudflared" > /dev/null || nohup /usr/local/bin/cloudflared tunnel --edge-ip-version 4 --protocol auto --loglevel fatal run --token "$CLOUDFLARED_TOKEN" > /dev/null 2>&1 &
 
-*/5 * * * pgrep -x "/usr/local/bin/xray" > /dev/null || nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
+*/5 * * * pgrep -x "/usr/local/bin/xray" > /dev/null || XRAY_LOCATION_ASSET=/etc/xray/confs nohup /usr/local/bin/xray run -confdir /etc/xray/confs/ > /dev/null 2>&1 &
 
 */5 * * * pgrep -x "/usr/local/bin/realm" > /dev/null || /usr/local/bin/realm --token "$REALM_TOKEN" --listen 127.0.0.1:5555 > /dev/null 2>&1 &
 
