@@ -6,7 +6,7 @@
 : "${CF_SNI:?missing CF_SNI}"
 : "${CF_UUID:?missing CF_UUID}"
 
-echo "start_v5 20261123 cf"
+echo "start_v5 20261123 cf gemini"
 
 # ============================================================
 # [网络性能优化] Go 并行度
@@ -289,12 +289,6 @@ EOF
         "rules": [
             {
                 "domain": [
-                    "geosite:youtube"
-                ],
-                "outboundTag": "direct"
-            },
-            {
-                "domain": [
                     "domain:fcc.gov",
                     "geosite:google-gemini"
                 ],
@@ -318,13 +312,6 @@ else
     "routing": {
         "domainStrategy": "AsIs",
         "rules": [
-            {
-                "inboundTag": ["vless_ws","vless_xhttp","vless_enc_xhttp"],
-                "domain": [
-                    "geosite:youtube"
-                ],
-                "outboundTag": "direct"
-            },
             {
                 "inboundTag": ["vless_ws","vless_xhttp","vless_enc_xhttp"],
                 "domain": [
