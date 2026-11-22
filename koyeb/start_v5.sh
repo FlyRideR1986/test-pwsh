@@ -6,7 +6,7 @@
 : "${CF_SNI:?missing CF_SNI}"
 : "${CF_UUID:?missing CF_UUID}"
 
-echo "start_v5 20261122 cf"
+echo "start_v5 20261123 cf"
 
 # ============================================================
 # [网络性能优化] Go 并行度
@@ -296,7 +296,7 @@ EOF
             {
                 "domain": [
                     "domain:fcc.gov",
-                    "geosite:google"
+                    "geosite:google-gemini"
                 ],
                 "outboundTag": "cf"
             },
@@ -329,7 +329,7 @@ else
                 "inboundTag": ["vless_ws","vless_xhttp","vless_enc_xhttp"],
                 "domain": [
                     "domain:fcc.gov",
-                    "geosite:google"
+                    "geosite:google-gemini"
                 ],
                 "outboundTag": "cf"
             },
