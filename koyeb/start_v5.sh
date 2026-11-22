@@ -296,7 +296,6 @@ EOF
             {
                 "domain": [
                     "domain:fcc.gov",
-                    "domain:koyeb.com",
                     "geosite:google"
                 ],
                 "outboundTag": "cf"
@@ -330,7 +329,6 @@ else
                 "inboundTag": ["vless_ws","vless_xhttp","vless_enc_xhttp"],
                 "domain": [
                     "domain:fcc.gov",
-                    "domain:koyeb.com",
                     "geosite:google"
                 ],
                 "outboundTag": "cf"
